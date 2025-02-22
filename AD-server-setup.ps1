@@ -37,21 +37,21 @@ if (-not (CheckProgress "NetworkConfigured")) {
     $NetAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
 
     if ($NetAdapter) {
-        $ExistingIP = Get-NetIPAddress -InterfaceIndex $NetAdapter.ifIndex -AddressFamily IPv4
+        Write-Host "Resetting network configuration..."
 
-        if ($ExistingIP -and $ExistingIP.IPAddress -eq $IPAddress) {
-            Write-Host "IP Address $IPAddress is already assigned to $($NetAdapter.Name). Skipping configuration."
-        } else {
-            Write-Host "Configuring network settings..."
-            
-            if ($ExistingIP) {
-                Write-Host "Removing existing IP address $($ExistingIP.IPAddress)..."
-                Remove-NetIPAddress -InterfaceIndex $NetAdapter.ifIndex -Confirm:$false
-            }
+        # Remove all existing IP addresses on the adapter
+        Get-NetIPAddress -InterfaceIndex $NetAdapter.ifIndex -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 
-            New-NetIPAddress -InterfaceIndex $NetAdapter.ifIndex -IPAddress $IPAddress -PrefixLength $PrefixLength -DefaultGateway $DefaultGateway
-            Set-DnsClientServerAddress -InterfaceIndex $NetAdapter.ifIndex -ServerAddresses ($PrimaryDNS, $SecondaryDNS)
-        }
+        # Remove any existing default gateway
+        Remove-NetRoute -InterfaceIndex $NetAdapter.ifIndex -DestinationPrefix "0.0.0.0/0" -Confirm:$false -ErrorAction SilentlyContinue
+
+        # Reset DNS settings to default
+        Set-DnsClientServerAddress -InterfaceIndex $NetAdapter.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue
+
+        # Apply new network settings
+        Write-Host "Applying new network configuration..."
+        New-NetIPAddress -InterfaceIndex $NetAdapter.ifIndex -IPAddress $IPAddress -PrefixLength $PrefixLength -DefaultGateway $DefaultGateway
+        Set-DnsClientServerAddress -InterfaceIndex $NetAdapter.ifIndex -ServerAddresses ($PrimaryDNS, $SecondaryDNS)
     } else {
         Write-Host "No active network adapter found!" -ForegroundColor Red
         exit
@@ -62,9 +62,10 @@ if (-not (CheckProgress "NetworkConfigured")) {
 
 # Step 2: Rename Computer (Skip if already done)
 if (-not (CheckProgress "RebootAfterRename")) {
+    $NewHostname = Read-Host "Enter the new hostname for this server"
     Rename-Computer -NewName $NewHostname -Force
     Write-Host "Server name changed to $NewHostname. A reboot is required before continuing."
-    
+
     # Mark progress and restart
     MarkStepCompleted "RebootAfterRename"
     Restart-Computer -Force
@@ -74,19 +75,28 @@ if (-not (CheckProgress "RebootAfterRename")) {
 # Step 3: Install AD, DHCP, and DNS (Skip if already done)
 if (-not (CheckProgress "RolesInstalled")) {
     Write-Host "Installing Active Directory Domain Services (AD DS), DHCP, and DNS..."
-    Install-WindowsFeature -Name AD-Domain-Services, DHCP, DNS -IncludeManagementTools
+
+    # Check if the Windows Server installation ISO is mounted
+    $InstallSource = "D:\Sources\SxS"
+    if (Test-Path $InstallSource) {
+        Install-WindowsFeature -Name AD-Domain-Services, DHCP, DNS -IncludeManagementTools -Source $InstallSource
+    } else {
+        Install-WindowsFeature -Name AD-Domain-Services, DHCP, DNS -IncludeManagementTools
+    }
+
+    # Verify installation was successful
+    if (-not (Get-WindowsFeature AD-Domain-Services).Installed) {
+        Write-Host "AD DS installation failed! Check Windows installation source." -ForegroundColor Red
+        exit
+    }
+
     MarkStepCompleted "RolesInstalled"
 }
 
-# Check if reboot is needed before domain promotion
-if (
-    (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") -or
-    (Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")
-) {
-    Write-Host "A reboot is required before domain promotion. Restarting now..."
-    MarkStepCompleted "RebootBeforePromotion"
-    Restart-Computer -Force
-    exit
+# Ensure ADDS module is available
+if (-not (Get-Command Install-ADDSForest -ErrorAction SilentlyContinue)) {
+    Write-Host "Loading AD DS module..."
+    Import-Module ADDSDeployment -ErrorAction SilentlyContinue
 }
 
 # Step 4: Promote to Domain Controller (Skip if already done)
@@ -94,9 +104,14 @@ if (-not (CheckProgress "DomainPromoted")) {
     $DomainName = Read-Host "Enter the domain name (e.g., example.local)"
     $SafeModePassword = Read-Host "Enter a Safe Mode Administrator password (used for recovery mode)" -AsSecureString
 
-    Write-Host "Configuring the server as a domain controller..."
-    Install-ADDSForest -DomainName $DomainName -SafeModeAdministratorPassword $SafeModePassword -InstallDNS -Force
-    MarkStepCompleted "DomainPromoted"
+    if (Get-Command Install-ADDSForest -ErrorAction SilentlyContinue) {
+        Write-Host "Configuring the server as a domain controller..."
+        Install-ADDSForest -DomainName $DomainName -SafeModeAdministratorPassword $SafeModePassword -InstallDNS -Force
+        MarkStepCompleted "DomainPromoted"
+    } else {
+        Write-Host "ERROR: AD DS module is not available. Make sure the role is installed correctly." -ForegroundColor Red
+        exit
+    }
 }
 
 # Step 5: Configure DNS Forwarders (Optional)
@@ -104,7 +119,7 @@ $SetupForwarders = Read-Host "Do you want to configure DNS Forwarders? (Y/N)"
 if ($SetupForwarders -match "[Yy]" -and -not (CheckProgress "DNSForwardersConfigured")) {
     $DNSForwarder1 = Read-Host "Enter a DNS forwarder IP (e.g., 8.8.8.8)"
     $DNSForwarder2 = Read-Host "Enter a second DNS forwarder IP (or press Enter to skip)"
-    
+
     Write-Host "Setting DNS Forwarders..."
     Add-DnsServerForwarder -IPAddress $DNSForwarder1 -PassThru
     if ($DNSForwarder2 -ne "") {
