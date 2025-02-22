@@ -10,8 +10,8 @@ This repository contains two automation scripts:
 ✅ Installs **Active Directory, DNS, DHCP** (optional)  
 ✅ Renames the server and **automates reboots**  
 
-##🛠 ssh_setup.sh (Linux)
-###Features:
+## 🛠 ssh_setup.sh (Linux)
+### Features:
 
 ✅ Installs OpenSSH
 ✅ Enables and starts the SSH service
