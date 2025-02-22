@@ -1,8 +1,9 @@
 # 🚀 ITT-221 Setup Scripts
 
-This repository contains two automation scripts:  
+This repository contains several automation scripts used to automate prior assignments:  
 - **AD-Server-Setup.ps1** → Automates Windows Server setup (AD DS, DNS, DHCP)  
 - **ssh_setup.sh** → Installs and configures OpenSSH on Linux  
+- **users_and_groups.sh** → Automatically configures any desired number of users and groups, creates directories for each group, assigns permissions, and lets you select which users should be in the sudoers group
 
 ## 📌 AD-Server-Setup.ps1 (Windows Server)
 ### Features:
@@ -16,6 +17,14 @@ This repository contains two automation scripts:
 ✅ Installs OpenSSH
 ✅ Enables and starts the SSH service
 ✅ Configures the firewall for SSH
+
+## users_and_groups.sh (Linux)
+### Features: 
+
+✅ Creates user groups and assigns users to them
+✅ Configures home directories and group-based permissions
+✅ Restricts folder access to only assigned group members
+✅ Grants sudo access to designated users (optional)
 
 🛠 Notes:
 
