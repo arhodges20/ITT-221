@@ -14,17 +14,17 @@ This repository contains several automation scripts used to automate prior assig
 ## 🛠 ssh_setup.sh (Linux)
 ### Features:
 
-✅ Installs OpenSSH
-✅ Enables and starts the SSH service
-✅ Configures the firewall for SSH
+✅ Installs OpenSSH  
+✅ Enables and starts the SSH service  
+✅ Configures the firewall for SSH  
 
 ## users_and_groups.sh (Linux)
 ### Features: 
 
-✅ Creates user groups and assigns users to them
-✅ Configures home directories and group-based permissions
-✅ Restricts folder access to only assigned group members
-✅ Grants sudo access to designated users (optional)
+✅ Creates user groups and assigns users to them  
+✅ Configures home directories and group-based permissions  
+✅ Restricts folder access to only assigned group members  
+✅ Grants sudo access to designated users (optional)  
 
 🛠 Notes:
 
